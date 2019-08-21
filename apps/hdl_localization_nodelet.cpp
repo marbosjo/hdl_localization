@@ -47,14 +47,19 @@ public:
     invert_imu = private_nh.param<bool>("invert_imu", false);
     if(use_imu) {
       NODELET_INFO("enable imu-based prediction");
-      imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
+      imu_sub = mt_nh.subscribe("imu/data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
-    points_sub = mt_nh.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::points_callback, this);
-    globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
-    initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
+    points_sub = mt_nh.subscribe("points", 5, &HdlLocalizationNodelet::points_callback, this);
+    globalmap_sub = nh.subscribe("globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
+    initialpose_sub = nh.subscribe("initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
 
-    pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
-    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
+    pose_pub = nh.advertise<nav_msgs::Odometry>("odom", 5, false);
+    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("aligned_points", 5, false);
+    
+    map_frame_id = private_nh.param<std::string>("map_frame_id", "map");
+    base_frame_id = private_nh.param<std::string>("base_frame_id", "base_link");
+    odom_frame_id = private_nh.param<std::string>("odom_frame_id", "odom");
+
   }
 
 private:
@@ -165,7 +170,7 @@ private:
     // NODELET_INFO_STREAM("processing_time: " << avg_processing_time * 1000.0 << "[msec]");
 
     if(aligned_pub.getNumSubscribers()) {
-      aligned->header.frame_id = "map";
+      aligned->header.frame_id = map_frame_id;
       aligned->header.stamp = cloud->header.stamp;
       aligned_pub.publish(aligned);
     }
@@ -230,20 +235,20 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", "velodyne");
+    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", "rslidar");
     pose_broadcaster.sendTransform(odom_trans);
 
     // publish the transform
     nav_msgs::Odometry odom;
     odom.header.stamp = stamp;
-    odom.header.frame_id = "map";
+    odom.header.frame_id = map_frame_id;
 
     odom.pose.pose.position.x = pose(0, 3);
     odom.pose.pose.position.y = pose(1, 3);
     odom.pose.pose.position.z = pose(2, 3);
     odom.pose.pose.orientation = odom_trans.transform.rotation;
 
-    odom.child_frame_id = "velodyne";
+    odom.child_frame_id = odom_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
@@ -297,6 +302,11 @@ private:
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
   tf::TransformBroadcaster pose_broadcaster;
+
+  // frames
+  std::string map_frame_id;
+  std::string base_frame_id;
+  std::string odom_frame_id;
 
   // imu input buffer
   std::mutex imu_data_mutex;
