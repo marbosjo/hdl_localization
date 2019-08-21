@@ -5,6 +5,7 @@
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h>
 #include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
@@ -134,6 +135,12 @@ private:
     const auto& stamp = points_msg->header.stamp;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
     pcl::fromROSMsg(*points_msg, *cloud);
+    
+    if(!base_frame_id.empty()) {
+      bool transformed = pcl_ros::transformPointCloud(base_frame_id, *cloud, *cloud, tf_listener);
+      if (transformed == false)
+        return;
+    }
 
     if(cloud->empty()) {
       NODELET_ERROR("cloud is empty!!");
@@ -302,6 +309,7 @@ private:
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
   tf::TransformBroadcaster pose_broadcaster;
+  tf::TransformListener tf_listener;
 
   // frames
   std::string map_frame_id;
