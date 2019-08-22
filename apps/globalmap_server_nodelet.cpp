@@ -41,19 +41,20 @@ public:
     initialize_params();
 
     // publish globalmap with "latched" publisher
-    globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("globalmap", 5, true);
+    globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("globalmap", 1, true);
     globalmap_pub.publish(globalmap);
+    ROS_INFO("He publicao");
   }
 
 private:
   void initialize_params() {
-    global_frame_id = private_nh.param<std::string>("global_frame_id", "map");
+    map_frame_id = private_nh.param<std::string>("map_frame_id", "map");
     
     // read globalmap from a pcd file
     std::string globalmap_pcd = private_nh.param<std::string>("globalmap_pcd", "");
     globalmap.reset(new pcl::PointCloud<PointT>());
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
-    globalmap->header.frame_id = global_frame_id;
+    globalmap->header.frame_id = map_frame_id;
 
     // downsample globalmap
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
@@ -76,7 +77,7 @@ private:
   ros::Publisher globalmap_pub;
 
   pcl::PointCloud<PointT>::Ptr globalmap;
-  std::string global_frame_id;
+  std::string map_frame_id;
 };
 
 }

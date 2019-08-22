@@ -42,7 +42,6 @@ public:
     private_nh = getPrivateNodeHandle();
 
     processing_time.resize(16);
-    initialize_params();
 
     use_imu = private_nh.param<bool>("use_imu", true);
     invert_imu = private_nh.param<bool>("invert_imu", false);
@@ -61,6 +60,7 @@ public:
     base_frame_id = private_nh.param<std::string>("base_frame_id", "base_link");
     odom_frame_id = private_nh.param<std::string>("odom_frame_id", "odom");
 
+    initialize_params();
   }
 
 private:
@@ -72,7 +72,7 @@ private:
     double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-    downsample_filter = voxelgrid;
+    downsample_filter = NULL; //voxelgrid;
 
     pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
     ndt->setTransformationEpsilon(0.01);
@@ -139,7 +139,10 @@ private:
     if(!base_frame_id.empty()) {
       bool transformed = pcl_ros::transformPointCloud(base_frame_id, *cloud, *cloud, tf_listener);
       if (transformed == false)
+      {
+        NODELET_WARN_STREAM("Cannot transform cloud from frame " << cloud->header.frame_id << " into " << base_frame_id);
         return;
+      }
     }
 
     if(cloud->empty()) {
@@ -242,7 +245,7 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", "rslidar");
+    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, map_frame_id, odom_frame_id);
     pose_broadcaster.sendTransform(odom_trans);
 
     // publish the transform
