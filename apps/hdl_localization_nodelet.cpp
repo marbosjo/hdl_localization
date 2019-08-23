@@ -244,14 +244,13 @@ private:
    * @param pose   odometry pose to be published
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
-    // broadcast the transform over tf
 
-    tf::Stamped<tf::Pose> map2base = matrix2transform_tf(stamp, pose, map_frame_id, base_frame_id);
     try
     {
-       tf_listener.waitForTransform(odom_frame_id, base_frame_id, stamp, ros::Duration(1));
-       
+       tf::Stamped<tf::Pose> map2base = matrix2transform_tf(stamp, pose, map_frame_id, base_frame_id);
        tf::StampedTransform base2odom, map2odom;
+       
+       tf_listener.waitForTransform(odom_frame_id, base_frame_id, stamp, ros::Duration(1));
        tf_listener.lookupTransform(base_frame_id,odom_frame_id,stamp,base2odom);
 
        map2odom.setData(map2base * base2odom);
@@ -259,51 +258,12 @@ private:
        map2odom.child_frame_id_ = odom_frame_id;
        map2odom.stamp_ = stamp + ros::Duration(1);
 
-       //tf_listener.transformPose(odom_frame_id, map2base, map2odom);
-       geometry_msgs::Pose p, o;
-       tf::poseTFToMsg(map2base, p);
-       tf::poseTFToMsg(map2odom, o);
-
-//       ROS_INFO_STREAM("map2base: " << p);
-       ROS_INFO_STREAM("map2odom: " << o);
-       //ROS_INFO_STREAM("map2odom: " << map2odom);
        pose_broadcaster.sendTransform(map2odom);
     }
     catch (const tf::TransformException& e)
     {
-       ROS_INFO_STREAM("Og, execept " << e.what());
+       ROS_INFO_STREAM("TF Exception: " << e.what());
     }
-//
-//
-//   
-//    tf::StampedTransform trans(map2odom, ros::Time::now() + ros::Duration(3), map_frame_id,odom_frame_id);
-//    pose_broadcaster.sendTransform(trans);
-
-
-
-
-//    geometry_msgs::TransformStamped odom_trans = matrix2transform_msgs(stamp, pose, map_frame_id, odom_frame_id);
-//    pose_broadcaster.sendTransform(odom_trans);
-//
-//    ROS_INFO_STREAM("odom_trans" << odom_trans);
-//
-//    // publish the transform
-//    nav_msgs::Odometry odom;
-//    odom.header.stamp = stamp;
-//    odom.header.frame_id = map_frame_id;
-//
-//    odom.pose.pose.position.x = pose(0, 3);
-//    odom.pose.pose.position.y = pose(1, 3);
-//    odom.pose.pose.position.z = pose(2, 3);
-//    odom.pose.pose.orientation = odom_trans.transform.rotation;
-//
-//    odom.child_frame_id = odom_frame_id;
-//    odom.twist.twist.linear.x = 0.0;
-//    odom.twist.twist.linear.y = 0.0;
-//    odom.twist.twist.angular.z = 0.0;
-//
-//    pose_pub.publish(odom);
-
   }
 
   /**
