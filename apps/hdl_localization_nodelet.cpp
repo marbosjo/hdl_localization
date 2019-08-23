@@ -136,14 +136,14 @@ private:
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
     pcl::fromROSMsg(*points_msg, *cloud);
     
-    if(!base_frame_id.empty()) {
-      bool transformed = pcl_ros::transformPointCloud(base_frame_id, *cloud, *cloud, tf_listener);
-      if (transformed == false)
-      {
-        NODELET_WARN_STREAM("Cannot transform cloud from frame " << cloud->header.frame_id << " into " << base_frame_id);
-        return;
-      }
-    }
+    //if(!base_frame_id.empty()) {
+    //  bool transformed = pcl_ros::transformPointCloud(base_frame_id, *cloud, *cloud, tf_listener);
+    //  if (transformed == false)
+    //  {
+    //    NODELET_WARN_STREAM("Cannot transform cloud from frame " << cloud->header.frame_id << " into " << base_frame_id);
+    //    return;
+    //  }
+    //}
 
     if(cloud->empty()) {
       NODELET_ERROR("cloud is empty!!");
@@ -245,25 +245,65 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, map_frame_id, odom_frame_id);
-    pose_broadcaster.sendTransform(odom_trans);
 
-    // publish the transform
-    nav_msgs::Odometry odom;
-    odom.header.stamp = stamp;
-    odom.header.frame_id = map_frame_id;
+    tf::Stamped<tf::Pose> map2base = matrix2transform_tf(stamp, pose, map_frame_id, base_frame_id);
+    try
+    {
+       tf_listener.waitForTransform(odom_frame_id, base_frame_id, stamp, ros::Duration(1));
+       
+       tf::StampedTransform base2odom, map2odom;
+       tf_listener.lookupTransform(base_frame_id,odom_frame_id,stamp,base2odom);
 
-    odom.pose.pose.position.x = pose(0, 3);
-    odom.pose.pose.position.y = pose(1, 3);
-    odom.pose.pose.position.z = pose(2, 3);
-    odom.pose.pose.orientation = odom_trans.transform.rotation;
+       map2odom.setData(map2base * base2odom);
+       map2odom.frame_id_ = map_frame_id;
+       map2odom.child_frame_id_ = odom_frame_id;
+       map2odom.stamp_ = stamp + ros::Duration(1);
 
-    odom.child_frame_id = odom_frame_id;
-    odom.twist.twist.linear.x = 0.0;
-    odom.twist.twist.linear.y = 0.0;
-    odom.twist.twist.angular.z = 0.0;
+       //tf_listener.transformPose(odom_frame_id, map2base, map2odom);
+       geometry_msgs::Pose p, o;
+       tf::poseTFToMsg(map2base, p);
+       tf::poseTFToMsg(map2odom, o);
 
-    pose_pub.publish(odom);
+//       ROS_INFO_STREAM("map2base: " << p);
+       ROS_INFO_STREAM("map2odom: " << o);
+       //ROS_INFO_STREAM("map2odom: " << map2odom);
+       pose_broadcaster.sendTransform(map2odom);
+    }
+    catch (const tf::TransformException& e)
+    {
+       ROS_INFO_STREAM("Og, execept " << e.what());
+    }
+//
+//
+//   
+//    tf::StampedTransform trans(map2odom, ros::Time::now() + ros::Duration(3), map_frame_id,odom_frame_id);
+//    pose_broadcaster.sendTransform(trans);
+
+
+
+
+//    geometry_msgs::TransformStamped odom_trans = matrix2transform_msgs(stamp, pose, map_frame_id, odom_frame_id);
+//    pose_broadcaster.sendTransform(odom_trans);
+//
+//    ROS_INFO_STREAM("odom_trans" << odom_trans);
+//
+//    // publish the transform
+//    nav_msgs::Odometry odom;
+//    odom.header.stamp = stamp;
+//    odom.header.frame_id = map_frame_id;
+//
+//    odom.pose.pose.position.x = pose(0, 3);
+//    odom.pose.pose.position.y = pose(1, 3);
+//    odom.pose.pose.position.z = pose(2, 3);
+//    odom.pose.pose.orientation = odom_trans.transform.rotation;
+//
+//    odom.child_frame_id = odom_frame_id;
+//    odom.twist.twist.linear.x = 0.0;
+//    odom.twist.twist.linear.y = 0.0;
+//    odom.twist.twist.angular.z = 0.0;
+//
+//    pose_pub.publish(odom);
+
   }
 
   /**
@@ -274,7 +314,40 @@ private:
    * @param child_frame_id  child_frame_id
    * @return transform
    */
-  geometry_msgs::TransformStamped matrix2transform(const ros::Time& stamp, const Eigen::Matrix4f& pose, const std::string& frame_id, const std::string& child_frame_id) {
+  tf::Stamped<tf::Pose> matrix2transform_tf(const ros::Time& stamp, const Eigen::Matrix4f& pose, const std::string& frame_id, const std::string& child_frame_id) {
+    Eigen::Quaternionf quat(pose.block<3, 3>(0, 0));
+    quat.normalize();
+    // geometry_msgs::Quaternion odom_quat;
+    // odom_quat.w = quat.w();
+    // odom_quat.x = quat.x();
+    // odom_quat.y = quat.y();
+    // odom_quat.z = quat.z();
+
+    // geometry_msgs::TransformStamped odom_trans;
+    // odom_trans.header.stamp = stamp;
+    // odom_trans.header.frame_id = frame_id;
+    // odom_trans.child_frame_id = child_frame_id;
+
+    // odom_trans.transform.translation.x = pose(0, 3);
+    // odom_trans.transform.translation.y = pose(1, 3);
+    // odom_trans.transform.translation.z = pose(2, 3);
+    // odom_trans.transform.rotation = odom_quat;
+
+    tf::Stamped<tf::Pose> trans(tf::Transform(tf::Quaternion(quat.x(), quat.y(), quat.z(), quat.w()),
+                                              tf::Vector3(pose(0, 3), pose(1, 3), pose(2, 3))),
+                                stamp, child_frame_id); // not sure if should be frame_id
+    return trans;
+  }
+
+  /**
+   * @brief convert a Eigen::Matrix to TransformedStamped
+   * @param stamp           timestamp
+   * @param pose            pose matrix
+   * @param frame_id        frame_id
+   * @param child_frame_id  child_frame_id
+   * @return transform
+   */
+  geometry_msgs::TransformStamped matrix2transform_msgs(const ros::Time& stamp, const Eigen::Matrix4f& pose, const std::string& frame_id, const std::string& child_frame_id) {
     Eigen::Quaternionf quat(pose.block<3, 3>(0, 0));
     quat.normalize();
     geometry_msgs::Quaternion odom_quat;
